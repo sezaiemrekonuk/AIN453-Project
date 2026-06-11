@@ -16,16 +16,18 @@ Screenshots saved to ~/pf_screenshots/ at three ESS milestones.
 
 import math
 import os
-import time
 import threading
 import warnings
 
 import matplotlib
-warnings.filterwarnings('ignore', category=UserWarning)  # Suppress matplotlib backend warnings
-try:
-    matplotlib.use('Qt5Agg')   # Try interactive backend
-except Exception:
-    matplotlib.use('Agg')      # Fallback to non-interactive
+warnings.filterwarnings('ignore', category=UserWarning)
+for _backend in ('Qt5Agg', 'TkAgg', 'Agg'):
+    try:
+        matplotlib.use(_backend)
+        import matplotlib.pyplot as _plt_test
+        break
+    except Exception:
+        continue
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
@@ -147,7 +149,7 @@ class VisualizerNode:
         ax.set_title('Particle Filter Localization — AR Tag Room', fontsize=12)
         ax.grid(True, alpha=0.25)
 
-        tag_patch = mpatches.Patch(color='#cc0000', label='AR tag (ID 0)')
+        tag_patch = mpatches.Patch(color='#cc0000', label='AR tags')
         ax.legend(handles=[self._odom_line, self._pf_line, tag_patch],
                   loc='upper right', fontsize=9)
 
@@ -215,17 +217,13 @@ def main():
     spin_thread.start()
 
     fig, ax = node.setup_figure()
-    try:
-        plt.ion()  # Interactive mode, if supported by backend
-    except RuntimeError:
-        pass  # Non-interactive backend
+    plt.ion()
+    plt.show(block=False)
 
     try:
         while not rospy.is_shutdown():
             node.draw()
-            fig.canvas.draw_idle()
-            fig.canvas.flush_events()
-            time.sleep(0.10)
+            plt.pause(0.10)
     except KeyboardInterrupt:
         pass
     finally:
