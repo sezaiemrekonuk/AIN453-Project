@@ -118,6 +118,13 @@ class ParticleFilterNode:
     # ── Sensor model (update) ─────────────────────────────────────────────
 
     def _update(self, z_dist, z_bear):
+        # Sanity check: reject measurements that are unrealistic for the grid
+        # Grid is 0.9m x 0.9m, so max realistic distance is ~1.3m (diagonal)
+        max_grid_dist = 1.5  # Allow some tolerance
+        if z_dist > max_grid_dist:
+            rospy.logwarn('Measurement rejected: distance %.2f m exceeds grid bounds (max ~%.2f m)', z_dist, max_grid_dist)
+            return
+        
         px  = self.particles[:, 0]
         py  = self.particles[:, 1]
         pth = self.particles[:, 2]
@@ -128,7 +135,7 @@ class ParticleFilterNode:
             dx = tx - px
             dy = ty - py
             exp_dist = np.sqrt(dx**2 + dy**2)
-            exp_bear = (np.arctan2(dy, dx) - pth + math.pi) % (2*math.pi) - math.pi
+            exp_bear = (pth - np.arctan2(dy, dx) + math.pi) % (2*math.pi) - math.pi
 
             bd = (z_bear - exp_bear + math.pi) % (2*math.pi) - math.pi
 
@@ -172,10 +179,16 @@ class ParticleFilterNode:
 
     def _weighted_mean(self):
         w = self.weights
-        x = float(np.sum(w * self.particles[:, 0]))
-        y = float(np.sum(w * self.particles[:, 1]))
-        th = math.atan2(float(np.sum(w * np.sin(self.particles[:, 2]))),
-                        float(np.sum(w * np.cos(self.particles[:, 2]))))
+        # Use top-25% particles to avoid multi-modal mean oscillation
+        threshold = np.percentile(w, 75)
+        mask = w >= threshold
+        w_top = w[mask]
+        w_top = w_top / w_top.sum()
+        pts = self.particles[mask]
+        x = float(np.sum(w_top * pts[:, 0]))
+        y = float(np.sum(w_top * pts[:, 1]))
+        th = math.atan2(float(np.sum(w_top * np.sin(pts[:, 2]))),
+                        float(np.sum(w_top * np.cos(pts[:, 2]))))
         return x, y, th
 
     # ── Publishers ────────────────────────────────────────────────────────
@@ -225,6 +238,7 @@ class ParticleFilterNode:
             return
         z_dist = msg.data[0]
         z_bear = msg.data[1]
+        rospy.loginfo('AR Detection received: distance=%.3f m, bearing=%.3f rad', z_dist, z_bear)
         with self.lock:
             self._update(z_dist, z_bear)
             ex, ey, _ = self._weighted_mean()

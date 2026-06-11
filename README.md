@@ -14,7 +14,7 @@ packages/pf_localization/
 │   ├── particle_filter_node  — SIR particle filter (predict + update + resample)
 │   └── visualizer_node       — real-time matplotlib display (run on laptop)
 ├── src/pf_localization/
-│   └── constants.py          — tag map, room bounds (edit to match physical setup)
+│   └── constants.py          — tag map, square grid bounds (edit to match physical setup)
 ├── launch/pf.launch           — wires all nodes with Duckiebot topic remaps
 └── config/params.yaml         — tunable parameters
 ```
@@ -23,21 +23,21 @@ packages/pf_localization/
 
 ## Physical setup
 
-Match the simulation room exactly:
+Use the lower-left corner of the 90 cm x 90 cm grid as $(0, 0)$.
 
-- **Room**: 6 m × 5 m (x: −3.0..+3.0 m, y: −2.5..+2.5 m)
-- **Tags**: 8 × ArUco ID 0 (DICT_4X4_50), 0.25 m side length, placed asymmetrically:
+- **Grid**: x: 0.0..0.90 m, y: 0.0..0.90 m
+- **Tags**: 8 × April Tag 36h11, placed asymmetrically:
 
 | Tag | Position (x, y) | Wall |
 |-----|----------------|------|
-| T0  | (−1.50, −2.46) | South-Left |
-| T1  | (+1.20, −2.46) | South-Right |
-| T2  | (−0.30, +2.46) | North-Left |
-| T3  | (+2.00, +2.46) | North-Right |
-| T4  | (−2.96, −0.50) | West-Bottom |
-| T5  | (−2.96, +1.50) | West-Top |
-| T6  | (+2.96, +0.50) | East-Top |
-| T7  | (+2.96, −1.50) | East-Bottom |
+| T0  | (0.33, 0.00) | Bottom |
+| T1  | (0.50, 0.00) | Bottom |
+| T2  | (0.90, 0.25) | Right |
+| T3  | (0.90, 0.45) | Right |
+| T4  | (0.00, 0.42) | Left |
+| T5  | (0.00, 0.71) | Left |
+| T6  | (0.05, 0.90) | Top |
+| T7  | (0.55, 0.90) | Top |
 
 Tag centers at **1.0 m** height.  
 If you change any position, update `src/pf_localization/constants.py` and `config/params.yaml`.

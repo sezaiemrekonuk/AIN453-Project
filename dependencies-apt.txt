@@ -1,6 +1,8 @@
 # Python scientific stack
 python3-numpy
 python3-matplotlib
+python3-tk
+python3-pyqt5
 
 # OpenCV with aruco (contrib included in Ubuntu 20.04 ros packages)
 python3-opencv

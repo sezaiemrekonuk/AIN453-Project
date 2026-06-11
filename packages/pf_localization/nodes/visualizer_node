@@ -16,10 +16,16 @@ Screenshots saved to ~/pf_screenshots/ at three ESS milestones.
 
 import math
 import os
+import time
 import threading
+import warnings
 
 import matplotlib
-matplotlib.use('TkAgg')   # swap to 'Qt5Agg' if TkAgg unavailable
+warnings.filterwarnings('ignore', category=UserWarning)  # Suppress matplotlib backend warnings
+try:
+    matplotlib.use('Qt5Agg')   # Try interactive backend
+except Exception:
+    matplotlib.use('Agg')      # Fallback to non-interactive
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 import numpy as np
@@ -134,6 +140,7 @@ class VisualizerNode:
 
         ax.set_xlim(ROOM_X_MIN - 0.4, ROOM_X_MAX + 0.4)
         ax.set_ylim(ROOM_Y_MIN - 0.4, ROOM_Y_MAX + 0.4)
+        ax.invert_yaxis()
         ax.set_aspect('equal')
         ax.set_xlabel('X [m]', fontsize=10)
         ax.set_ylabel('Y [m]', fontsize=10)
@@ -208,17 +215,20 @@ def main():
     spin_thread.start()
 
     fig, ax = node.setup_figure()
-    plt.ion()
+    try:
+        plt.ion()  # Interactive mode, if supported by backend
+    except RuntimeError:
+        pass  # Non-interactive backend
 
     try:
         while not rospy.is_shutdown():
             node.draw()
-            fig.canvas.draw()
-            plt.pause(0.10)
+            fig.canvas.draw_idle()
+            fig.canvas.flush_events()
+            time.sleep(0.10)
     except KeyboardInterrupt:
         pass
     finally:
-        plt.ioff()
         plt.close('all')
 
 

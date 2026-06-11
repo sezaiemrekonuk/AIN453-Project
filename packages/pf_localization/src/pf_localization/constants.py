@@ -1,26 +1,26 @@
 """
-Shared constants: tag map, room geometry.
-Room: 6 m x 5 m  (x: -3.0..+3.0,  y: -2.5..+2.5)
+Shared constants: tag map, grid geometry.
+The total grid is 90 cm x 90 cm, and the lower-left corner is (0, 0).
 8 AR tags — all same ID (0), asymmetric placement.
 """
 import numpy as np
 
 # 2-D tag positions in world frame [m]
 TAG_POSITIONS = np.array([
-    (-1.50, -2.46),   # tag 0  South-Left
-    ( 1.20, -2.46),   # tag 1  South-Right
-    (-0.30,  2.46),   # tag 2  North-Left
-    ( 2.00,  2.46),   # tag 3  North-Right
-    (-2.96, -0.50),   # tag 4  West-Bottom
-    (-2.96,  1.50),   # tag 5  West-Top
-    ( 2.96,  0.50),   # tag 6  East-Top
-    ( 2.96, -1.50),   # tag 7  East-Bottom
+    (0.33, 0.00),   # tag 0
+    (0.50, 0.00),   # tag 1
+    (0.90, 0.25),   # tag 2
+    (0.90, 0.45),   # tag 3
+    (0.00, 0.42),   # tag 4
+    (0.00, 0.71),   # tag 5
+    (0.05, 0.90),   # tag 6
+    (0.55, 0.90),   # tag 7
 ], dtype=float)
 
-TAG_SIZE = 0.25   # physical marker side length [m]
+TAG_SIZE = 0.065   # physical marker side length [m]  (6.5 cm)
 TAG_Z    = 1.00   # tag center height [m] above floor
 
-ROOM_X_MIN, ROOM_X_MAX = -3.0,  3.0
-ROOM_Y_MIN, ROOM_Y_MAX = -2.5,  2.5
+ROOM_X_MIN, ROOM_X_MAX = 0.0,  0.90
+ROOM_Y_MIN, ROOM_Y_MAX = 0.0,  0.90
 
 N_TAGS = len(TAG_POSITIONS)

@@ -8,10 +8,13 @@ dt-launchfile-init
 # YOUR CODE BELOW THIS LINE
 # ----------------------------------------------------------------------------
 
-# Launch particle filter localization (aruco_detector + particle_filter nodes).
-# Add  run_visualizer:=true  to also start the matplotlib visualizer
-# (requires a display — typically run separately on a laptop).
-dt-exec roslaunch pf_localization pf.launch
+# Debug: check ROS topics are available
+sleep 2
+echo "===== Available ROS Topics ====="
+rostopic list || echo "rostopic unavailable"
+
+# Launch particle filter localization with visualizer
+dt-exec roslaunch pf_localization pf.launch run_visualizer:=true
 
 # ----------------------------------------------------------------------------
 # YOUR CODE ABOVE THIS LINE

@@ -2,7 +2,7 @@
 """
 ArUco Detector Node  (ROS 1 / Duckiebot)
 ==========================================
-Detects ArUco markers (DICT_4X4_50, ID 0) in the compressed camera stream.
+Detects April Tag 36h11 markers (ID 0) in the compressed camera stream.
 Supports both the old OpenCV aruco API (<= 4.6) and the new one (>= 4.7).
 
 Subscriptions
@@ -40,13 +40,13 @@ def _build_aruco_detector():
     """Return a callable detect(gray) -> (corners, ids, rejected)."""
     if hasattr(cv2.aruco, 'ArucoDetector'):
         # OpenCV >= 4.7
-        d = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+        d = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_APRILTAG_36h11)
         p = cv2.aruco.DetectorParameters()
         det = cv2.aruco.ArucoDetector(d, p)
         return det.detectMarkers
     else:
         # OpenCV <= 4.6  (Ubuntu 20.04 ships 4.2)
-        d = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_50)
+        d = cv2.aruco.Dictionary_get(cv2.aruco.DICT_APRILTAG_36h11)
         p = cv2.aruco.DetectorParameters_create()
         return lambda gray: cv2.aruco.detectMarkers(gray, d, parameters=p)
 
@@ -106,8 +106,13 @@ class ArucoDetectorNode:
 
         self._frame_count += 1
         if ids is None or len(ids) == 0:
+            if self._frame_count % 100 == 0:
+                rospy.loginfo_throttle(5.0, 'ArUco: No markers detected (frame %d)', self._frame_count)
             return
 
+        rospy.loginfo('ArUco: Detected %d marker(s) in frame %d', len(ids), self._frame_count)
+
+        publish_count = 0
         for i in range(len(ids)):
             img_pts = corners[i].reshape(4, 2).astype(np.float64)
 
@@ -115,6 +120,7 @@ class ArucoDetectorNode:
                 self._obj_pts, img_pts, self._cam_mtx, self._dist,
                 flags=cv2.SOLVEPNP_IPPE_SQUARE)
             if not ok:
+                rospy.logwarn('ArUco: solvePnP failed for marker %d', i)
                 continue
 
             # Horizontal distance in camera frame: sqrt(X^2 + Z^2)
@@ -124,16 +130,16 @@ class ArucoDetectorNode:
             tz = float(tvec[2][0])
             horiz_dist = math.sqrt(tx * tx + tz * tz)
 
-            # Horizontal bearing: positive = tag to the left of camera
+            # Horizontal bearing: positive = tag to the left (CCW convention, matches sensor model)
             bearing = math.atan2(tx, tz)
 
             out = Float64MultiArray()
             out.data = [horiz_dist, bearing]
             self._det_pub.publish(out)
+            publish_count += 1
+            rospy.logdebug('ArUco: Published detection - dist=%.3f m, bearing=%.3f rad', horiz_dist, bearing)
 
-        if self._frame_count % 30 == 0 and ids is not None:
-            rospy.loginfo_throttle(5.0, 'ArUco: %d marker(s) in frame %d',
-                                   len(ids), self._frame_count)
+        rospy.loginfo('ArUco: Published %d detection(s) out of %d detected markers', publish_count, len(ids))
 
 
 def main():
