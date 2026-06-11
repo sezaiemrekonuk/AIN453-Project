@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""
+Visualizer Node  (ROS 1)
+=========================
+Real-time matplotlib display. Run on a machine with a display
+(laptop with ROS_MASTER_URI pointing at the Duckiebot, or inside
+the container with DISPLAY forwarded).
+
+Subscriptions
+  ~particles    geometry_msgs/PoseArray
+  ~pf_estimate  geometry_msgs/Pose
+  ~odom         nav_msgs/Odometry
+
+Screenshots saved to ~/pf_screenshots/ at three ESS milestones.
+"""
+
+import math
+import os
+import threading
+
+import matplotlib
+matplotlib.use('TkAgg')   # swap to 'Qt5Agg' if TkAgg unavailable
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import numpy as np
+
+import rospy
+from geometry_msgs.msg import Pose, PoseArray
+from nav_msgs.msg import Odometry
+
+from pf_localization.constants import (
+    TAG_POSITIONS, ROOM_X_MIN, ROOM_X_MAX, ROOM_Y_MIN, ROOM_Y_MAX
+)
+
+MAX_TRAJ_LEN   = 800
+SCREENSHOT_DIR = os.path.expanduser('~/pf_screenshots')
+
+
+class VisualizerNode:
+
+    def __init__(self):
+        rospy.init_node('visualizer', anonymous=False)
+
+        self.lock             = threading.Lock()
+        self.particles        = np.zeros((2000, 3))
+        self.weights          = np.ones(2000) / 2000
+        self.pf_trajectory    = []
+        self.odom_trajectory  = []
+        self._particles_recv  = False
+        self._saved = {
+            'initial_spread':      False,
+            'partial_convergence': False,
+            'converged':           False,
+        }
+        os.makedirs(SCREENSHOT_DIR, exist_ok=True)
+
+        rospy.Subscriber('~particles',   PoseArray, self._particles_cb, queue_size=10)
+        rospy.Subscriber('~pf_estimate', Pose,      self._estimate_cb,  queue_size=10)
+        rospy.Subscriber('~odom',        Odometry,  self._odom_cb,      queue_size=10)
+
+        rospy.loginfo('Visualizer ready — opening matplotlib window')
+
+    # ── Callbacks ─────────────────────────────────────────────────────────
+
+    def _particles_cb(self, msg):
+        n = len(msg.poses)
+        if n == 0:
+            return
+        pts = np.zeros((n, 3))
+        wts = np.zeros(n)
+        for i, pose in enumerate(msg.poses):
+            pts[i, 0] = pose.position.x
+            pts[i, 1] = pose.position.y
+            wts[i]    = pose.position.z / n
+        with self.lock:
+            self.particles       = pts
+            self.weights         = wts
+            self._particles_recv = True
+
+    def _estimate_cb(self, msg):
+        with self.lock:
+            self.pf_trajectory.append((msg.position.x, msg.position.y))
+            if len(self.pf_trajectory) > MAX_TRAJ_LEN:
+                self.pf_trajectory.pop(0)
+
+    def _odom_cb(self, msg):
+        with self.lock:
+            self.odom_trajectory.append((
+                msg.pose.pose.position.x,
+                msg.pose.pose.position.y))
+            if len(self.odom_trajectory) > MAX_TRAJ_LEN:
+                self.odom_trajectory.pop(0)
+
+    # ── Figure setup (called once from main thread) ────────────────────────
+
+    def setup_figure(self):
+        fig, ax = plt.subplots(figsize=(10, 8))
+        self._fig = fig
+        plt.tight_layout()
+
+        ax.set_facecolor('#f9f9e8')
+        room = mpatches.FancyBboxPatch(
+            (ROOM_X_MIN, ROOM_Y_MIN),
+            ROOM_X_MAX - ROOM_X_MIN,
+            ROOM_Y_MAX - ROOM_Y_MIN,
+            boxstyle='square,pad=0',
+            linewidth=3, edgecolor='#333333', facecolor='#f5f5dc', zorder=1)
+        ax.add_patch(room)
+
+        for i, (tx, ty) in enumerate(TAG_POSITIONS):
+            ax.plot(tx, ty, 's', color='#cc0000', markersize=14, zorder=5,
+                    markeredgecolor='black', markeredgewidth=0.8)
+            ax.text(tx + 0.08, ty + 0.10, f'T{i}', fontsize=7,
+                    color='#800000', fontweight='bold', zorder=6)
+
+        init_w = self.weights.copy()
+        w_max  = init_w.max()
+        init_c = (init_w / w_max) if w_max > 1e-15 else np.ones(len(init_w)) * 0.5
+        self._sc = ax.scatter(
+            self.particles[:, 0], self.particles[:, 1],
+            c=init_c, cmap='plasma', vmin=0, vmax=1,
+            s=8, alpha=0.70, zorder=3, linewidths=0)
+        fig.colorbar(self._sc, ax=ax, fraction=0.03, pad=0.02,
+                     label='Normalised weight')
+
+        self._odom_line, = ax.plot([], [], '-', color='#3399ff',
+                                   linewidth=1.8, label='Odometry only', zorder=4)
+        self._odom_dot,  = ax.plot([], [], 'o', color='#0055aa',
+                                   markersize=7, zorder=7)
+        self._pf_line,   = ax.plot([], [], '-', color='#22aa44',
+                                   linewidth=2.2, label='PF estimate', zorder=4)
+        self._pf_star,   = ax.plot([], [], '*', color='#006622',
+                                   markersize=13, zorder=7)
+
+        ax.set_xlim(ROOM_X_MIN - 0.4, ROOM_X_MAX + 0.4)
+        ax.set_ylim(ROOM_Y_MIN - 0.4, ROOM_Y_MAX + 0.4)
+        ax.set_aspect('equal')
+        ax.set_xlabel('X [m]', fontsize=10)
+        ax.set_ylabel('Y [m]', fontsize=10)
+        ax.set_title('Particle Filter Localization — AR Tag Room', fontsize=12)
+        ax.grid(True, alpha=0.25)
+
+        tag_patch = mpatches.Patch(color='#cc0000', label='AR tag (ID 0)')
+        ax.legend(handles=[self._odom_line, self._pf_line, tag_patch],
+                  loc='upper right', fontsize=9)
+
+        return fig, ax
+
+    # ── Per-frame update ──────────────────────────────────────────────────
+
+    def draw(self):
+        with self.lock:
+            particles        = self.particles.copy()
+            weights          = self.weights.copy()
+            pf_traj          = list(self.pf_trajectory)
+            odom_traj        = list(self.odom_trajectory)
+            particles_arrived = self._particles_recv
+
+        n = len(weights)
+
+        if n > 0:
+            w_max  = weights.max()
+            w_norm = (weights / w_max) if w_max > 1e-15 else np.ones(n) * 0.5
+            self._sc.set_offsets(particles[:, :2])
+            self._sc.set_array(w_norm)
+
+        if len(odom_traj) > 1:
+            oa = np.array(odom_traj)
+            self._odom_line.set_data(oa[:, 0], oa[:, 1])
+            self._odom_dot.set_data([oa[-1, 0]], [oa[-1, 1]])
+        else:
+            self._odom_line.set_data([], [])
+            self._odom_dot.set_data([], [])
+
+        if len(pf_traj) > 1:
+            pa = np.array(pf_traj)
+            self._pf_line.set_data(pa[:, 0], pa[:, 1])
+            self._pf_star.set_data([pa[-1, 0]], [pa[-1, 1]])
+        else:
+            self._pf_line.set_data([], [])
+            self._pf_star.set_data([], [])
+
+        if particles_arrived and n > 0:
+            ess = 1.0 / (float(np.sum(weights**2)) + 1e-300)
+            self._maybe_save_screenshot(ess, n)
+
+    def _maybe_save_screenshot(self, ess, n):
+        if not self._saved['initial_spread'] and ess > 0.8 * n:
+            self._save_png('initial_spread.png', ess, n)
+        elif not self._saved['partial_convergence'] and 0.3 * n < ess <= 0.8 * n:
+            self._save_png('partial_convergence.png', ess, n)
+        elif not self._saved['converged'] and ess <= 0.3 * n:
+            self._save_png('converged.png', ess, n)
+
+    def _save_png(self, filename, ess, n):
+        path = os.path.join(SCREENSHOT_DIR, filename)
+        self._fig.savefig(path, dpi=150, bbox_inches='tight')
+        key = filename.replace('.png', '')
+        self._saved[key] = True
+        rospy.loginfo('Screenshot saved -> %s  (ESS=%.0f / N=%d)', path, ess, n)
+
+
+def main():
+    node = VisualizerNode()
+
+    # ROS spinning in background thread; matplotlib must run in main thread
+    spin_thread = threading.Thread(target=rospy.spin, daemon=True)
+    spin_thread.start()
+
+    fig, ax = node.setup_figure()
+    plt.ion()
+
+    try:
+        while not rospy.is_shutdown():
+            node.draw()
+            fig.canvas.draw()
+            plt.pause(0.10)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        plt.ioff()
+        plt.close('all')
+
+
+if __name__ == '__main__':
+    main()

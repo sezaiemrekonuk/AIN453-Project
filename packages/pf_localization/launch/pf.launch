@@ -1,0 +1,44 @@
+<launch>
+  <!-- Vehicle name from environment (set by Duckietown runtime) -->
+  <arg name="veh"            default="$(env VEHICLE_NAME)" />
+
+  <!-- Odometry source — change if your deadreckoning node uses a different name -->
+  <arg name="odom_topic"     default="/$(arg veh)/deadreckoning_node/odometry" />
+
+  <!-- Set to true to launch the visualizer (needs a display / DISPLAY env var) -->
+  <arg name="run_visualizer" default="false" />
+
+  <!-- ── ArUco Detector ───────────────────────────────────────────────── -->
+  <node pkg="pf_localization" type="aruco_detector_node" name="aruco_detector"
+        output="screen" ns="$(arg veh)">
+    <!-- Duckiebot camera topics -->
+    <remap from="~image/compressed" to="/$(arg veh)/camera_node/image/compressed" />
+    <remap from="~camera_info"      to="/$(arg veh)/camera_node/camera_info" />
+    <!-- Shared detection topic -->
+    <remap from="~ar_detection"     to="/$(arg veh)/ar_detection" />
+    <rosparam file="$(find pf_localization)/config/params.yaml" command="load" />
+  </node>
+
+  <!-- ── Particle Filter ──────────────────────────────────────────────── -->
+  <node pkg="pf_localization" type="particle_filter_node" name="particle_filter"
+        output="screen" ns="$(arg veh)">
+    <remap from="~odom"         to="$(arg odom_topic)" />
+    <remap from="~ar_detection" to="/$(arg veh)/ar_detection" />
+    <remap from="~particles"    to="/$(arg veh)/particles" />
+    <remap from="~pf_estimate"  to="/$(arg veh)/pf_estimate" />
+    <rosparam file="$(find pf_localization)/config/params.yaml" command="load" />
+  </node>
+
+  <!-- ── Visualizer (optional) ────────────────────────────────────────── -->
+  <!--
+    Run on a laptop with:
+      roslaunch pf_localization pf.launch run_visualizer:=true
+    while pointing ROS_MASTER_URI at the Duckiebot.
+  -->
+  <node pkg="pf_localization" type="visualizer_node" name="visualizer"
+        output="screen" ns="$(arg veh)" if="$(arg run_visualizer)">
+    <remap from="~particles"   to="/$(arg veh)/particles" />
+    <remap from="~pf_estimate" to="/$(arg veh)/pf_estimate" />
+    <remap from="~odom"        to="$(arg odom_topic)" />
+  </node>
+</launch>

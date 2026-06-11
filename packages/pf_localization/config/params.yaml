@@ -1,0 +1,26 @@
+# ── Particle Filter parameters ────────────────────────────────────────────
+particle_filter:
+  n_particles: 2000
+  sigma_dist:  0.10      # distance std [m]  — larger than sim to absorb real-sensor noise
+  sigma_bear:  0.08      # bearing  std [rad]
+  alpha: [0.10, 0.05, 0.05, 0.02]   # odometry noise (a1..a4)
+
+# ── ArUco Detector parameters ─────────────────────────────────────────────
+aruco_detector:
+  tag_size: 0.25         # physical marker side length [m]
+
+# ── Tag map (2-D world-frame positions [m]) ───────────────────────────────
+# Must match constants.py and the physical tag placement.
+tag_map:
+  positions:
+    - [-1.50, -2.46]   # tag 0 – South, left
+    - [ 1.20, -2.46]   # tag 1 – South, right
+    - [-0.30,  2.46]   # tag 2 – North, left
+    - [ 2.00,  2.46]   # tag 3 – North, right
+    - [-2.96, -0.50]   # tag 4 – West,  bottom
+    - [-2.96,  1.50]   # tag 5 – West,  top
+    - [ 2.96,  0.50]   # tag 6 – East,  top
+    - [ 2.96, -1.50]   # tag 7 – East,  bottom
+  tag_height: 1.00      # marker center height above floor [m]
+  room_x: [-3.0, 3.0]
+  room_y: [-2.5, 2.5]

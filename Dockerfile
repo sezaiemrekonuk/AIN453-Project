@@ -1,9 +1,9 @@
 # parameters
-ARG REPO_NAME="<REPO_NAME_HERE>"
-ARG DESCRIPTION="<DESCRIPTION_HERE>"
-ARG MAINTAINER="<YOUR_FULL_NAME> (<YOUR_EMAIL_ADDRESS>)"
+ARG REPO_NAME="AIN453-Project"
+ARG DESCRIPTION="Particle Filter Localization with AR Tags for Duckiebot"
+ARG MAINTAINER="Student (sezaiemrekonuk@gmail.com)"
 # pick an icon from: https://fontawesome.com/v4.7.0/icons/
-ARG ICON="cube"
+ARG ICON="crosshairs"
 
 # ==================================================>
 # ==> Do not change the code below this line

@@ -8,13 +8,10 @@ dt-launchfile-init
 # YOUR CODE BELOW THIS LINE
 # ----------------------------------------------------------------------------
 
-
-# NOTE: Use the variable DT_REPO_PATH to know the absolute path to your code
-# NOTE: Use `dt-exec COMMAND` to run the main process (blocking process)
-
-# launching app
-dt-exec echo "This is an empty launch script. Update it to launch your application."
-
+# Launch particle filter localization (aruco_detector + particle_filter nodes).
+# Add  run_visualizer:=true  to also start the matplotlib visualizer
+# (requires a display — typically run separately on a laptop).
+dt-exec roslaunch pf_localization pf.launch
 
 # ----------------------------------------------------------------------------
 # YOUR CODE ABOVE THIS LINE

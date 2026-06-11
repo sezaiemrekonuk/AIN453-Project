@@ -1,0 +1,145 @@
+#!/usr/bin/env python3
+"""
+ArUco Detector Node  (ROS 1 / Duckiebot)
+==========================================
+Detects ArUco markers (DICT_4X4_50, ID 0) in the compressed camera stream.
+Supports both the old OpenCV aruco API (<= 4.6) and the new one (>= 4.7).
+
+Subscriptions
+  ~image/compressed   sensor_msgs/CompressedImage
+  ~camera_info        sensor_msgs/CameraInfo   (loaded once at startup)
+
+Publications
+  ~ar_detection       std_msgs/Float64MultiArray
+                        data = [horizontal_distance_m, bearing_rad]
+                        One message per detected marker per frame.
+
+Parameters
+  ~tag_size     float  default 0.25   physical marker side length [m]
+"""
+
+import math
+import numpy as np
+import cv2
+
+import rospy
+from sensor_msgs.msg import CompressedImage, CameraInfo
+from std_msgs.msg import Float64MultiArray
+
+from pf_localization.constants import TAG_SIZE
+
+# Default camera matrix (Duckiebot OV5647, 640x480, approximate)
+# Overridden once a CameraInfo message arrives.
+_DEFAULT_K = np.array([[302.0,   0.0, 320.0],
+                       [  0.0, 302.0, 240.0],
+                       [  0.0,   0.0,   1.0]], dtype=np.float64)
+_DEFAULT_D = np.zeros((4, 1), dtype=np.float64)
+
+
+def _build_aruco_detector():
+    """Return a callable detect(gray) -> (corners, ids, rejected)."""
+    if hasattr(cv2.aruco, 'ArucoDetector'):
+        # OpenCV >= 4.7
+        d = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+        p = cv2.aruco.DetectorParameters()
+        det = cv2.aruco.ArucoDetector(d, p)
+        return det.detectMarkers
+    else:
+        # OpenCV <= 4.6  (Ubuntu 20.04 ships 4.2)
+        d = cv2.aruco.Dictionary_get(cv2.aruco.DICT_4X4_50)
+        p = cv2.aruco.DetectorParameters_create()
+        return lambda gray: cv2.aruco.detectMarkers(gray, d, parameters=p)
+
+
+class ArucoDetectorNode:
+
+    def __init__(self):
+        rospy.init_node('aruco_detector', anonymous=False)
+
+        half = rospy.get_param('~tag_size', TAG_SIZE) / 2.0
+        self._obj_pts = np.array([
+            [-half,  half, 0],
+            [ half,  half, 0],
+            [ half, -half, 0],
+            [-half, -half, 0]], dtype=np.float64)
+
+        self._cam_mtx = _DEFAULT_K.copy()
+        self._dist    = _DEFAULT_D.copy()
+        self._cam_info_ready = False
+
+        self._detect = _build_aruco_detector()
+
+        self._det_pub = rospy.Publisher('~ar_detection', Float64MultiArray, queue_size=10)
+
+        # Large buffer for compressed images to avoid drops
+        rospy.Subscriber('~image/compressed', CompressedImage,
+                         self._image_cb, queue_size=1, buff_size=2**24)
+        rospy.Subscriber('~camera_info', CameraInfo,
+                         self._camera_info_cb, queue_size=1)
+
+        self._frame_count = 0
+        rospy.loginfo('ArUco detector ready (DICT_4X4_50, tag_size=%.3f m)', half * 2)
+
+    def _camera_info_cb(self, msg):
+        if self._cam_info_ready:
+            return
+        K = msg.K   # row-major 3x3 flattened
+        self._cam_mtx = np.array([[K[0], 0.0, K[2]],
+                                  [0.0, K[4], K[5]],
+                                  [0.0,  0.0,  1.0]], dtype=np.float64)
+        d = list(msg.D)
+        # Keep first 4 distortion coefficients
+        self._dist = np.array(d[:4] + [0.0] * max(0, 4 - len(d)),
+                              dtype=np.float64).reshape((4, 1))
+        self._cam_info_ready = True
+        rospy.loginfo('Camera intrinsics loaded: fx=%.2f fy=%.2f cx=%.2f cy=%.2f',
+                      K[0], K[4], K[2], K[5])
+
+    def _image_cb(self, msg):
+        np_arr = np.frombuffer(msg.data, np.uint8)
+        bgr = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+        if bgr is None:
+            return
+
+        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+        corners, ids, _ = self._detect(gray)
+
+        self._frame_count += 1
+        if ids is None or len(ids) == 0:
+            return
+
+        for i in range(len(ids)):
+            img_pts = corners[i].reshape(4, 2).astype(np.float64)
+
+            ok, rvec, tvec = cv2.solvePnP(
+                self._obj_pts, img_pts, self._cam_mtx, self._dist,
+                flags=cv2.SOLVEPNP_IPPE_SQUARE)
+            if not ok:
+                continue
+
+            # Horizontal distance in camera frame: sqrt(X^2 + Z^2)
+            # This gives the 2D ground-plane distance consistent with
+            # the particle filter sensor model (which uses 2D tag positions).
+            tx = float(tvec[0][0])
+            tz = float(tvec[2][0])
+            horiz_dist = math.sqrt(tx * tx + tz * tz)
+
+            # Horizontal bearing: positive = tag to the left of camera
+            bearing = math.atan2(tx, tz)
+
+            out = Float64MultiArray()
+            out.data = [horiz_dist, bearing]
+            self._det_pub.publish(out)
+
+        if self._frame_count % 30 == 0 and ids is not None:
+            rospy.loginfo_throttle(5.0, 'ArUco: %d marker(s) in frame %d',
+                                   len(ids), self._frame_count)
+
+
+def main():
+    node = ArucoDetectorNode()
+    rospy.spin()
+
+
+if __name__ == '__main__':
+    main()

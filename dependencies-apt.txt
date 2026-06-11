@@ -1,1 +1,6 @@
-# LIST YOUR APT PACKAGES HERE
+# Python scientific stack
+python3-numpy
+python3-matplotlib
+
+# OpenCV with aruco (contrib included in Ubuntu 20.04 ros packages)
+python3-opencv

@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>pf_localization</name>
+  <version>1.0.0</version>
+  <description>Particle Filter Localization with AR Tags for Duckiebot</description>
+  <maintainer email="sezaiemrekonuk@gmail.com">Student</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>rospy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>sensor_msgs</depend>
+</package>
