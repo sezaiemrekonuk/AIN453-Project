@@ -78,7 +78,7 @@ class ArucoDetectorNode:
                          self._camera_info_cb, queue_size=1)
 
         self._frame_count = 0
-        rospy.loginfo('ArUco detector ready (DICT_4X4_50, tag_size=%.3f m)', half * 2)
+        rospy.loginfo('ArUco detector ready (APRILTAG_36h11, tag_size=%.3f m)', half * 2)
 
     def _camera_info_cb(self, msg):
         if self._cam_info_ready:
@@ -105,14 +105,15 @@ class ArucoDetectorNode:
         corners, ids, _ = self._detect(gray)
 
         self._frame_count += 1
+        log_this_frame = (self._frame_count % 30 == 0)
         if ids is None or len(ids) == 0:
-            if self._frame_count % 100 == 0:
-                rospy.loginfo_throttle(5.0, 'ArUco: No markers detected (frame %d)', self._frame_count)
+            if log_this_frame:
+                rospy.loginfo('ArUco: No markers detected')
             return
 
-        rospy.loginfo('ArUco: Detected %d marker(s) in frame %d', len(ids), self._frame_count)
-
         publish_count = 0
+        last_dist = 0.0
+        last_bearing = 0.0
         for i in range(len(ids)):
             img_pts = corners[i].reshape(4, 2).astype(np.float64)
 
@@ -137,9 +138,13 @@ class ArucoDetectorNode:
             out.data = [horiz_dist, bearing]
             self._det_pub.publish(out)
             publish_count += 1
+            last_dist = horiz_dist
+            last_bearing = bearing
             rospy.logdebug('ArUco: Published detection - dist=%.3f m, bearing=%.3f rad', horiz_dist, bearing)
 
-        rospy.loginfo('ArUco: Published %d detection(s) out of %d detected markers', publish_count, len(ids))
+        if log_this_frame and publish_count > 0:
+            rospy.loginfo('ArUco: Published %d/%d detection(s) in frame %d - dist=%.3f m, bearing=%.3f rad',
+                          publish_count, len(ids), self._frame_count, last_dist, last_bearing)
 
 
 def main():

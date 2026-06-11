@@ -1,13 +1,14 @@
+# This file is loaded separately into each node's private namespace from pf.launch.
+# Keep the parameters flat so rospy.get_param('~...') resolves them correctly.
+
 # ── Particle Filter parameters ────────────────────────────────────────────
-particle_filter:
-  n_particles: 2000
-  sigma_dist:  0.15      # distance std [m]
-  sigma_bear:  0.15      # bearing  std [rad]
-  alpha: [0.02, 0.005, 0.01, 0.002]  # odometry noise (a1..a4)
+n_particles: 2000
+sigma_dist:  0.05      # distance std [m]
+sigma_bear:  0.05      # bearing  std [rad]
+alpha: [0.10, 0.05, 0.05, 0.02]  # odometry noise (a1..a4)
 
 # ── ArUco Detector parameters ─────────────────────────────────────────────
-aruco_detector:
-  tag_size: 0.065         # physical marker side length [m]  (6.5 cm)
+tag_size: 0.065         # physical marker side length [m]  (6.5 cm)
 
 # ── Tag map (2-D world-frame positions [m]) ───────────────────────────────
 # Must match constants.py and the physical tag placement.

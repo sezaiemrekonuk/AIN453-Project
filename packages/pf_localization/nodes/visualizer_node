@@ -21,10 +21,12 @@ import warnings
 
 import matplotlib
 warnings.filterwarnings('ignore', category=UserWarning)
+_SELECTED_BACKEND = None
 for _backend in ('Qt5Agg', 'TkAgg', 'Agg'):
     try:
         matplotlib.use(_backend)
         import matplotlib.pyplot as _plt_test
+        _SELECTED_BACKEND = _backend
         break
     except Exception:
         continue
@@ -66,7 +68,9 @@ class VisualizerNode:
         rospy.Subscriber('~pf_estimate', Pose,      self._estimate_cb,  queue_size=10)
         rospy.Subscriber('~odom',        Odometry,  self._odom_cb,      queue_size=10)
 
-        rospy.loginfo('Visualizer ready — opening matplotlib window')
+        rospy.loginfo('Visualizer ready — opening matplotlib window (backend=%s)', _SELECTED_BACKEND or 'unknown')
+        if _SELECTED_BACKEND == 'Agg':
+            rospy.logwarn('Visualizer is using the non-interactive Agg backend. Set DISPLAY correctly for a GUI window.')
 
     # ── Callbacks ─────────────────────────────────────────────────────────
 
@@ -142,14 +146,13 @@ class VisualizerNode:
 
         ax.set_xlim(ROOM_X_MIN - 0.4, ROOM_X_MAX + 0.4)
         ax.set_ylim(ROOM_Y_MIN - 0.4, ROOM_Y_MAX + 0.4)
-        ax.invert_yaxis()
         ax.set_aspect('equal')
         ax.set_xlabel('X [m]', fontsize=10)
         ax.set_ylabel('Y [m]', fontsize=10)
         ax.set_title('Particle Filter Localization — AR Tag Room', fontsize=12)
         ax.grid(True, alpha=0.25)
 
-        tag_patch = mpatches.Patch(color='#cc0000', label='AR tags')
+        tag_patch = mpatches.Patch(color='#cc0000', label='AR tag (ID 0)')
         ax.legend(handles=[self._odom_line, self._pf_line, tag_patch],
                   loc='upper right', fontsize=9)
 
@@ -223,10 +226,12 @@ def main():
     try:
         while not rospy.is_shutdown():
             node.draw()
+            fig.canvas.draw()
             plt.pause(0.10)
     except KeyboardInterrupt:
         pass
     finally:
+        plt.ioff()
         plt.close('all')
 
 

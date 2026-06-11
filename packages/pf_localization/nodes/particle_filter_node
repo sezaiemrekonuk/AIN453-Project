@@ -61,11 +61,6 @@ class ParticleFilterNode:
         SIGMA_BEAR  = rospy.get_param('~sigma_bear',  SIGMA_BEAR)
         ALPHA       = rospy.get_param('~alpha',        ALPHA)
 
-        # Throttle: only predict when robot moved enough or enough time passed
-        self._min_predict_dt    = rospy.get_param('~min_predict_dt', 0.15)   # seconds
-        self._min_predict_dist  = rospy.get_param('~min_predict_dist', 0.005) # metres
-        self._last_predict_time = None
-
         self.lock       = threading.Lock()
         self.particles  = self._uniform_init()
         self.weights    = np.ones(N_PARTICLES) / N_PARTICLES
@@ -123,13 +118,6 @@ class ParticleFilterNode:
     # ── Sensor model (update) ─────────────────────────────────────────────
 
     def _update(self, z_dist, z_bear):
-        # Sanity check: reject measurements that are unrealistic for the grid
-        # Grid is 0.9m x 0.9m, so max realistic distance is ~1.3m (diagonal)
-        max_grid_dist = 1.5  # Allow some tolerance
-        if z_dist > max_grid_dist:
-            rospy.logwarn('Measurement rejected: distance %.2f m exceeds grid bounds (max ~%.2f m)', z_dist, max_grid_dist)
-            return
-        
         px  = self.particles[:, 0]
         py  = self.particles[:, 1]
         pth = self.particles[:, 2]
@@ -140,7 +128,7 @@ class ParticleFilterNode:
             dx = tx - px
             dy = ty - py
             exp_dist = np.sqrt(dx**2 + dy**2)
-            exp_bear = (pth - np.arctan2(dy, dx) + math.pi) % (2*math.pi) - math.pi
+            exp_bear = (np.arctan2(dy, dx) - pth + math.pi) % (2*math.pi) - math.pi
 
             bd = (z_bear - exp_bear + math.pi) % (2*math.pi) - math.pi
 
@@ -184,16 +172,10 @@ class ParticleFilterNode:
 
     def _weighted_mean(self):
         w = self.weights
-        # Use top-25% particles to avoid multi-modal mean oscillation
-        threshold = np.percentile(w, 75)
-        mask = w >= threshold
-        w_top = w[mask]
-        w_top = w_top / w_top.sum()
-        pts = self.particles[mask]
-        x = float(np.sum(w_top * pts[:, 0]))
-        y = float(np.sum(w_top * pts[:, 1]))
-        th = math.atan2(float(np.sum(w_top * np.sin(pts[:, 2]))),
-                        float(np.sum(w_top * np.cos(pts[:, 2]))))
+        x = float(np.sum(w * self.particles[:, 0]))
+        y = float(np.sum(w * self.particles[:, 1]))
+        th = math.atan2(float(np.sum(w * np.sin(self.particles[:, 2]))),
+                        float(np.sum(w * np.cos(self.particles[:, 2]))))
         return x, y, th
 
     # ── Publishers ────────────────────────────────────────────────────────
@@ -230,21 +212,10 @@ class ParticleFilterNode:
         with self.lock:
             if self.prev_odom is None:
                 self.prev_odom = curr
-                self._last_predict_time = rospy.Time.now().to_sec()
                 return
-
-            now = rospy.Time.now().to_sec()
-            dt  = now - self._last_predict_time if self._last_predict_time else 999.0
-            dx  = curr[0] - self.prev_odom[0]
-            dy  = curr[1] - self.prev_odom[1]
-            dist = math.sqrt(dx * dx + dy * dy)
-
-            if dt < self._min_predict_dt and dist < self._min_predict_dist:
-                return  # skip — robot barely moved and not enough time elapsed
 
             self._predict(curr, self.prev_odom)
             self.prev_odom = curr
-            self._last_predict_time = now
             self.odom_traj.append((x, y))
             if len(self.odom_traj) > 1000:
                 self.odom_traj.pop(0)
@@ -255,7 +226,6 @@ class ParticleFilterNode:
             return
         z_dist = msg.data[0]
         z_bear = msg.data[1]
-        rospy.loginfo('AR Detection received: distance=%.3f m, bearing=%.3f rad', z_dist, z_bear)
         with self.lock:
             self._update(z_dist, z_bear)
             ex, ey, _ = self._weighted_mean()

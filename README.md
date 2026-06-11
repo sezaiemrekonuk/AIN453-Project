@@ -65,10 +65,13 @@ dts devel run
 
 This executes `launchers/default.sh` which calls:
 ```bash
-roslaunch pf_localization pf.launch
+roslaunch pf_localization pf.launch run_visualizer:=true
 ```
 
-Two nodes start: `aruco_detector` and `particle_filter`. Topics:
+By default this starts `aruco_detector`, `particle_filter`, and the matplotlib visualizer.
+If you need headless mode, run with `RUN_VISUALIZER=false`.
+
+Topics:
 
 | Topic | Direction | Description |
 |-------|-----------|-------------|

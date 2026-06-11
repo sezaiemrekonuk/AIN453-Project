@@ -8,13 +8,11 @@ dt-launchfile-init
 # YOUR CODE BELOW THIS LINE
 # ----------------------------------------------------------------------------
 
-# Debug: check ROS topics are available
-sleep 2
-echo "===== Available ROS Topics ====="
-rostopic list || echo "rostopic unavailable"
-
-# Launch particle filter localization with visualizer
-dt-exec roslaunch pf_localization pf.launch run_visualizer:=true
+# Launch particle filter localization.
+# By default, the visualizer is enabled so `dts devel run` can open it directly
+# on a machine with a forwarded display. Set RUN_VISUALIZER=false to disable it.
+RUN_VISUALIZER="${RUN_VISUALIZER:-true}"
+dt-exec roslaunch pf_localization pf.launch run_visualizer:=${RUN_VISUALIZER}
 
 # ----------------------------------------------------------------------------
 # YOUR CODE ABOVE THIS LINE
